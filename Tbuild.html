@@ -1,0 +1,825 @@
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
+  <title>Tbuild</title>
+<body>
+  <canvas id="canvas"></canvas>
+  <div id = 'time'></div>
+  <div id = 'score'></div>
+<script id="tetris">
+
+//2024-01-26 build
+//2024-03-24 1.1v update
+//2024-04-17 v1.2 updating
+
+//const canvas = document.getElementById("canvas");
+//const timer = document.getElementById("time");
+
+const ctx = canvas.getContext("2d");
+const scale = 35;
+
+canvas.width = 800;
+canvas.height = 800;
+var time = 0;
+
+function create2(rows, columns){
+  var arr = new Array(rows);
+  for(var i = 0; i < rows; i++){
+    arr[i] = new Array(columns);
+    for(var j = 0; j < columns; j++)
+      arr[i][j] = 0;
+  }
+
+  return arr;
+}
+
+let LEVEL = 1;
+let SCORE = 0;
+let MAXSCORE = 0;
+let TIME = 0;
+let SPEED = 1000;
+let cron; // clearInterval ?
+let timer;
+let accel = 100;
+
+//const img...  //2025-02-28 현재 이미지는 없음. 소실.
+
+function updateTimer(){
+
+  //timer.innerText = TIME;
+  //TIME++;
+  //if(TIME > 99999) TIME = 0;
+
+
+
+  brickDropCheck();
+  cur.y += 1;
+  brickCollusionCheck("ArrowDown");
+  frameAnimation();
+}
+
+function realTimer(){
+  TIME++;
+  if(arrow.type == 2) if(TIME % 60 == 0) comingPoop();
+  if(TIME > 99999) TIME = 0;
+}
+
+function startTimer(){
+  cron = setInterval(updateTimer, SPEED);
+  timer = setInterval(realTimer, 1000);
+}
+
+function stopTimer(){
+  clearInterval(cron);
+  clearInterval(timer);
+}
+
+function speedControll(key){
+  if(key == 'u'){
+    accel = (LEVEL < 5) ? 100 : ((LEVEL < 10) ? 50 : 25);
+    if(SPEED == 100) return;
+    SPEED -= accel;
+    stopTimer();
+    startTimer();
+    LEVEL += 1;
+  }
+  if(key == 'd'){
+    accel = (LEVEL < 5) ? 100 : ((LEVEL < 10) ? 50 : 25);
+    SPEED += accel;
+    stopTimer();
+    startTimer();
+    LEVEL -= 1;
+  }
+}
+
+function flashAnimation(){
+  //이게 화면에 잠시 뜨는 효과
+}
+
+var board = create2(20, 10);
+var background = "white"
+var back_on = 0;
+
+class titleselection{
+  constructor(){
+    this.type = 1;
+    this.y = 1;
+    this.step = 0;
+    this.role = create2(3, 3);
+
+    this.role[1][1] = 1, this.role[2][0] = 1;
+    //color, level
+  }
+  move(key){
+    if(key == 'ArrowUp'){
+      this.y = (this.y < 1) ? 0 : this.y - 1;
+    }else if(key == 'ArrowDown'){
+      this.y = (this.y > 1) ? 2 : this.y + 1;
+    }
+  }
+  select(){
+    this.role[this.step] = [0,0,0];
+    this.role[this.step][this.y] = 1;
+
+    if(this.step == 1){
+      this.type = this.y;
+    }else if(this.step == 2){
+      var list = ["white", "gray", "#282828"];
+      background = list[this.y];
+    }
+  }
+  draw(){
+    ctx.fillStyle = "black";
+    ctx.beginPath();
+    ctx.moveTo(180, 430 + this.y * 100);
+    ctx.lineTo(180, 450 + this.y * 100);
+    ctx.lineTo(200, 440 + this.y * 100);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(380, 430 + this.y * 100);
+    ctx.lineTo(380, 450 + this.y * 100);
+    ctx.lineTo(360, 440 + this.y * 100);
+    ctx.closePath();
+    ctx.fill();
+
+    for(var i = 0; i < 3; i++){
+      if(this.role[this.step][i] == 1){
+        ctx.strokeStyle = "black";
+        ctx.strokeRect(240, 430 + i * 100, 100, 30);
+      }
+    }
+
+  }
+}
+
+class brick{
+  constructor(type){
+    this.x = 4;
+    this.y = 1;
+    this.type = type;
+    this.brickType(type);
+  }
+  brickType(type){
+    switch(type){
+      case 1:
+        this.arr_x = [0, 0, 1, 1];
+        this.arr_y = [1, 0, -1, 0];
+        break;
+      case 2:
+        this.arr_x = [2, 0, 1, 2];
+        this.arr_y = [-1, 0, 0, 0];
+        break;
+      case 3:
+        this.arr_x = [0, 0, 1, 1];
+        this.arr_y = [-1, 0, -1, 0];
+        break;
+      case 4:
+        this.arr_x = [1, 0, 0, 1];
+        this.arr_y = [1, 0, -1, 0];
+        break;
+      case 5:
+        this.arr_x = [-1, 0, 1, 2];
+        this.arr_y = [0, 0, 0, 0];
+        break;
+      case 6:
+        this.arr_x = [-1, 0, -1, 1];
+        this.arr_y = [-1, 0, 0, 0];
+        break;
+      case 7:
+        this.arr_x = [-1, 0, 0, 1];
+        this.arr_y = [0, 0, -1, 0];
+        break;
+      default:
+        console.log('error');
+    }
+  }
+
+  rotate(dir){
+    var xi = dir == 'z' ? -1 : 1;
+    var yi = dir == 'z' ? 1 : -1;
+
+    for(var i = 0; i < 4; i++){
+      var tmp = this.arr_x[i];
+      this.arr_x[i] = this.arr_y[i] * yi;
+      this.arr_y[i] = tmp * xi;
+    }
+  }
+
+  draw(option){
+    ctx.fillStyle = brickColor(this.type);
+    for(var i = 0; i < 4; i++){
+      var x = this.x + this.arr_x[i];
+      var y = this.y + this.arr_y[i];
+
+      if(option == 1) ctx.fillRect(440 + this.arr_x[i] * 30, 120 + this.arr_y[i] * 30, 30, 30);
+      else if(option == 2) ctx.fillRect(473 + this.arr_x[i] * 25, 285 + this.arr_y[i] * 25, 25, 25);
+      else ctx.fillRect(30 + x * scale, 30 + y * scale, scale, scale);
+    }
+  }
+
+  reset(type){
+    //console.log('reset' + type);
+    this.x = 4;
+    this.y = 1;
+    this.type = type;
+    this.brickType(type);
+  }
+}
+
+//o 노랑 i 하늘 ㅗ 보라 ㄴ파랑 역ㄴ주황 ㄹ빨강 역ㄹ초록
+//빨 주 노 초 하 파 보
+//1  2  3 4  5  6 7
+
+var brick_package = [new brick(7), new brick(3), new brick(2), new brick(6), new brick(1), new brick(5), new brick(4)];
+const next_package = [1, 2, 3, 4, 5, 6, 7];
+
+var next_idx = 0;
+var cur = brick_package[next_idx++];
+
+//초기값 추가 홀드랑 마지막용.
+var hold;
+var moving_brick = new brick(1);
+var dup = 0;
+//0123456789
+
+function brickShift(){
+  if(dup) return;
+  dup = 1;
+
+  if(!hold){
+    console.log('hold is not exist');
+    hold = new brick(cur.type);
+    brickPackageCheck();
+  }else{
+    moving_brick = hold;
+    hold = new brick(cur.type);
+    cur = moving_brick;
+    hold.reset(hold.type);
+    cur.reset(cur.type);
+  }
+}
+
+function brickDropCheck(){
+  //드랍 가능 조건
+  var pass = 0;
+
+  //console.log('drop check' + cur.type);
+  for(var i = 0; i < 4; i++){
+    if(cur.y + cur.arr_y[i] + 1 > 19) {pass = 1; break;}
+    if(board[cur.y + cur.arr_y[i] + 1][cur.x + cur.arr_x[i]]){ pass = 1; } // 하나라도 있다면.
+  }
+  if(!pass) return;
+  //console.log('drop available');
+
+  //drop
+  for(var i = 0; i < 4; i++){
+    board[cur.y + cur.arr_y[i]][cur.x + cur.arr_x[i]] = cur.type;
+  }
+
+  //드랍될때만 되야해서 여기가 맞긴하단 말이지..
+  for(var i = 0; i < 4; i++){ // 20으로 단순무식
+    //console.log("check" + cur.y + cur.arr_y[i] + " lines"); // 타이머랑 하드드랍이 겹쳐서 19~16이 아닌 20~17를 체킹 내지는 18~15
+    lineClearCheck(cur.y + cur.arr_y[i]);
+  }
+  //디버깅 0~19를 전부보는 방식.
+
+  console.log(next_idx + " " + brickColor(cur.type));
+  brickPackageCheck();
+  dup = 0;
+}
+
+function brickPackageCheck(){
+  //console.log("idx : " + next_idx);
+  cur = brick_package[next_idx++];
+  if(next_idx < 7) return; //현재 6일때 적용.
+
+  next_idx = 0;
+  moving_brick = new brick(brick_package[6].type);
+  cur = moving_brick;     //과거패턴의 마지막 브릭. 겹침문제.
+  for(var i = 0; i < 7; i++){
+    console.log(brickColor(brick_package[i].type));
+  }
+
+
+  //다음 브릭 세트
+  for(var index = 6; index > 0; index--){
+    const random_position = Math.floor(Math.random() * (index + 1));
+    const tmp = next_package[index];
+    next_package[index] = next_package[random_position];
+    next_package[random_position] = tmp;
+  }
+
+  //console.log("cur " + brickColor(cur.type));
+  //console.log("next ones");
+  for(var i = 0; i < 7; i++){
+    brick_package[i].reset(next_package[i]);
+    console.log(brickColor(brick_package[i].type));
+  }
+  //console.log(next_idx);
+  //cur = brick_package[next_idx++];
+}
+
+function brickColor(type){
+  switch(type){
+    case 1:
+      return "red";
+    case 2:
+      return "orange";
+    case 3:
+      return "yellow";
+    case 4:
+      return "green";
+    case 5:
+      return "aqua";
+    case 6:
+      return "blue";
+    case 7:
+      return "purple";
+    case 9:
+      return "#464646";
+    default:
+      return "rgba(0,0,0,0)";
+  }
+}
+
+var on = 0;
+var stop = 0;
+var arrow = new titleselection();
+
+// 키 입력 관리
+window.addEventListener("keydown", e => {
+  //const key = document.getElementById(e.key);
+  //title is on
+  if(on == 0){ //start
+    arrow.move(e.key);
+    //대충 행렬로 변경?
+    if(e.key == 'z'){
+      if(arrow.step == 0){
+        if(arrow.y == 1){
+          startTimer();
+          //timer.classList.add('hide');
+          on = 1;
+          console.log('start');
+          //start();
+          return;
+        }else if(arrow.y == 0){
+          arrow.step = 1;
+        }else{
+          arrow.step = 2;
+        }
+      }else{
+        arrow.select();
+      }
+    }else if(e.key == 'x'){
+      arrow.step = 0;
+    }
+    title();
+    return;
+  }
+
+  //재시작 관리
+  if(e.key == 'r'){
+    console.log('restart');
+    stopTimer();
+    brickPackageCheck();
+    var idx = Math.floor(Math.random() * 10);
+    if(idx == 1) back_on = 1;
+    start();
+    title();
+    return;
+  }
+  else if(e.key == 's'){
+    stop = 1;
+    console.log('stop');
+    //again = false;
+    stopTimer();
+
+    frameAnimation();
+    ctx.fillStyle = "balck";
+    ctx.font = "44pt Fira";
+    ctx.fillText("일시정지", 160, 360);
+
+    return;
+  }
+  else if(e.key == 'q' && stop == 1){
+    console.log('keep');
+    stop = 0;
+    stopTimer();
+    startTimer();
+  }
+  else if(stop == 1){ //간단한 락
+    return;
+  }
+
+  //홀드 기능
+  if(e.key == 'Shift'){
+    brickShift();
+  }
+
+  if (e.key == "ArrowLeft") cur.x -= 1;
+  else if (e.key == "ArrowRight") cur.x += 1;
+
+  if (e.key == "ArrowDown") cur.y += 1;
+
+  if (e.key == ' ') {
+    for(var i = 0; i < 20; i++){
+      cur.y += 1;
+      brickCollusionCheck(e.key);
+    }
+    brickDropCheck();
+  }
+
+  if(e.key == 'z' || e.key == 'x'){
+    cur.rotate(e.key);
+  }
+
+
+  //임의 속도업
+  if(arrow.type == 0){
+    speedControll(e.key);
+    if(e.key == 'e'){
+      console.log('drop poop');
+      comingPoop();
+    }
+  }
+  /*
+  if(e.key == 'i'){
+    SPEED -= 1;
+  }
+  if(e.key == 'o'){
+    stopTimer();
+    startTimer();
+  }
+  */
+
+  //충돌 체크
+  brickCollusionCheck(e.key);
+
+  frameAnimation();
+});
+
+
+window.addEventListener("keyup", e => {
+  //const key = document.getElementById(e.key);
+  //if (key) key.classList.remove('pressed');
+});
+
+
+function brickCollusionCheck(key){
+  //현 브릭이 벽을 넘었는가
+  //console.log(brickColor(cur.type));
+
+  for(var i = 0; i < 4; i++){
+    var x = cur.x + cur.arr_x[i];
+    if(x < 0) {cur.x += 1; console.log('a'); break;}
+    if(x > 9) {cur.x -= 1; console.log('b'); break;}
+  }
+  for(var i = 0; i < 4; i++){
+    var y = cur.y + cur.arr_y[i];
+    if(y > 19) {cur.y -= 1; break;}
+  }
+
+  //현 브릭이 기존 브릭에 침범하였는가
+  for(var i = 0; i < 4; i++){
+    var x = cur.x + cur.arr_x[i];
+    var y = cur.y + cur.arr_y[i];
+
+    //위로 뜨는거 방지.
+    if(x < 0 || y < 0) break;
+
+    if(board[y][x] != 0) {
+      //console.log(board[y][x] + " x " + x + " y " + y + 'collusion!!!');
+      if(key == "ArrowLeft"){
+        cur.x += 1;
+      }else if(key == "ArrowRight"){
+        cur.x -= 1;
+      }else if(key == "ArrowDown" || key == ' '){
+        cur.y -= 1;
+        if(key == ' ') brickCollusionCheck(key);
+      }else if(key == 'z' || key == 'x'){ //다만 t스핀 미구현
+        cur.rotate(key == 'z' ? 'x' : 'z');
+      }
+    }
+
+  }
+}
+
+//하드 전용 똥올라오기
+function comingPoop(cnt){
+  const max = (LEVEL * 0.5 > 5) ? 5 : Math.ceil(LEVEL * 0.5);
+  const empty = Math.floor(Math.random() * 10);
+
+  //화면을 넘긴 브릭들은 사라지나? 이건 어쩔래.
+  for(var j = 0; j < max; j++){
+    for(var i = 0; i < 19; i++){
+      board[i] = board[i + 1];
+    }
+    board[19] = [9,9,9,9,9,9,9,9,9,9];
+    board[19][empty] = 0;
+    if(cur.y > 0) cur.y--;
+  }
+}
+
+// *************라인 클리어****************
+function lineClearCheck(y){ //라인하나
+  //console.log(y);
+  for(var i = 0; i < 10; i++){
+    if(!board[y][i]) return;
+  }
+
+  console.log('lineclear!!!');
+  SCORE += 100;     //new added!
+  MAXSCORE = (MAXSCORE < SCORE) ? SCORE : MAXSCORE;
+
+  for(var i = y; i > 0; i--){
+    board[i] = board[i-1];
+  }
+  board[0] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+  //스피드 업
+  if(arrow.type != 0){ //normal 난이도 + hard 난이도
+    accel = (LEVEL < 5) ? 100 : ((LEVEL < 10) ? 50 : 25);
+    if(SCORE % 1000 == 0){
+      if(SPEED == 100) return;
+      SPEED -= accel;
+      stopTimer();
+      startTimer();
+
+      LEVEL += 1;
+    }
+  }
+  //score.innerText = SCORE;
+
+}
+
+function fixedBrickShow(){
+  for(var i = 0; i < 20; i++){
+    for(var j = 0; j < 10; j++){
+      ctx.fillStyle = brickColor(board[i][j]);
+      ctx.fillRect(30 + j * scale, 30 + i * scale, scale, scale);
+    }
+  }
+}
+
+function brickShow(b){
+  //console.log(b.type);
+  ctx.fillStyle = brickColor(b.type);
+  ctx.fillRect(30 + b.x * scale, 30 + b.y * scale, scale, scale);
+
+}
+
+function gameOver(){
+  var again = false;
+  //0 1 2 3 4 5 6 7 8 9
+  //      . . . .
+  //console.log("daaa");
+  //console.log(board[0][3] * board[0][4] * board[0][5] * board[0][6]);
+
+  if(board[0][3] + board[0][4] + board[0][5] + board[0][6]){
+    console.log("gameOver");
+    stopTimer();
+    again = true;
+
+  }
+
+  if(again){
+    //freeze;
+    stop = 1;
+    ctx.fillStyle = "red";
+    ctx.font = "44pt Fira";
+    ctx.fillText("게임오버", 160, 360);
+
+    window.addEventListener("keydown", e => {
+      console.log(e.key);
+      frameAnimation();
+    });
+  }
+}
+
+function frameAnimation(){
+  //프레임
+  ctx.fillStyle = "black";
+  ctx.fillRect(0, 0, scale * 17, scale * 23);
+
+  ctx.fillStyle = "white";
+  ctx.strokeStyle = "black";
+  ctx.fillRect(30, 30, scale * 15, scale * 21);
+  ctx.strokeRect(30, 30, scale * 15, scale * 21);
+
+  ctx.strokeRect(400, 50, 135, 135);
+  ctx.fillStyle = "black";
+  ctx.font = "14pt Fira";
+  ctx.fillText("Next brick", 405, 205);
+
+  ctx.strokeRect(435, 240, 100, 90);
+  ctx.fillText("Hold", 440, 350);
+
+  instanceBoard();
+  fixedBrickShow();
+  //brickShow(cur);
+
+  //사이드뷰
+  brick_package[next_idx % 7].draw(1); //[next_idx % 7]
+  if(hold) hold.draw(2);
+
+  cur.draw();
+
+  ctx.font = "10pt Fira";
+  for(var i = 0; i < 20; i++){
+    for(var j = 0; j < 10; j++){
+      //ctx.fillText(board[i][j], 390 + j * 10, 90 + i * 10);
+    }
+  }
+
+  //그리드 추가
+  grid();
+
+  //확률론
+  //if(back_on == 1) ctx.drawImage(img_back, 400, 560, 120, 190);
+
+  //변경할것
+  ctx.font = "20pt Fira";
+  if(arrow.type == 1){
+    ctx.fillStyle = "black";
+    ctx.fillText("NORMAL", 400, 400);
+  }
+  else if(arrow.type == 0){
+    ctx.fillStyle = "gray";
+    ctx.fillText("EASY", 400, 400);
+
+    ctx.font = "8pt Fira";
+    ctx.fillStyle = "black";
+    ctx.fillText("U/D 로 속도를 변경해보시오", 400, 700);
+    ctx.fillText("E를 누르면 행운이 찾아옵니다", 400, 740);
+  }else{
+    ctx.fillStyle = "red";
+    ctx.fillText("HARD", 400, 400);
+
+    ctx.font = "8pt Fira";
+    ctx.fillStyle = "black";
+    ctx.fillText("심심해진 고수를 위한 난이도", 400, 740);
+  }
+
+  ctx.fillStyle = "black";
+  ctx.font = "14pt Fira";
+  ctx.fillText("Level", 400, 430);
+  ctx.fillText(1, 500, 430);
+
+  ctx.fillText("score", 400, 470);
+  ctx.fillText(SCORE, 500, 470);
+
+  ctx.fillText("max score", 400, 510);
+  ctx.fillText(MAXSCORE, 500, 510);
+
+  ctx.fillText("time", 400, 550);
+  ctx.fillText(TIME, 500, 550);
+
+  //add
+  //ctx.fillText("speed", 400, 570);
+  //ctx.fillText( (1000 / 900), 500, 580); // 1000, 1배속. 500 2배속. 0.1 소수점 막는거 알아와야할듯.
+
+  //ctx.fillText("빠라빠라밤", 400, 474);
+  //ctx.fillText(qkqkkfqka, 500, 440);
+
+
+  //time++;
+  //frameAnimation();
+  gameOver();
+}
+
+function instanceBoard(){
+  ctx.fillStyle = background;
+  ctx.fillRect(30, 30, 350, 700);
+
+  if(background == "white"){
+    ctx.strokeStyle = "black";
+  }else{
+    ctx.strokeStyle = "white";
+  }
+
+  //가로로 10칸
+  ctx.beginPath();
+  ctx.moveTo(scale * 11 - 5, 30);
+  ctx.lineTo(scale * 11 - 5, 730);
+  ctx.stroke();
+  //세로로 20칸
+  ctx.beginPath();
+  ctx.moveTo(30, scale * 21 - 5);
+  ctx.lineTo(380, scale * 21 - 5);
+  ctx.stroke();
+
+
+  ctx.moveTo(30, 30);
+}
+
+function grid(){
+  //instance grid
+  ctx.fillStyle = "gray";
+  for(var i = 0; i < 10; i++){
+    ctx.moveTo(30, 30);
+    ctx.beginPath();
+    ctx.moveTo(30 + i * scale, 30);
+    ctx.lineTo(30 + i * scale, 730);
+    ctx.stroke();
+  }
+
+  for(var j = 0; j < 21; j++){
+    ctx.moveTo(30, 30);
+    ctx.beginPath();
+    ctx.moveTo(30, scale * j - 5);
+    ctx.lineTo(380, scale * j - 5);
+    ctx.stroke();
+  }
+}
+
+
+function start(){
+
+  board = create2(20, 10);
+  cur.x = 4;
+  cur.y = 1;
+
+  LEVEL = 1;
+  TIME = 0;
+  SCORE = 0;
+  SPEED = 1000;
+
+  var tmp;
+  hold = tmp; // 지워질련지.
+  dup = 0;
+  again = false;
+  on = 0;
+  stop = 0;
+
+
+  frameAnimation();
+}
+
+function title(){
+  //프레임
+  ctx.fillStyle = "black";
+  ctx.fillRect(0, 0, scale * 17, scale * 23);
+
+  ctx.fillStyle = "white";
+  ctx.strokeStyle = "black";
+  ctx.fillRect(30, 30, scale * 15, scale * 21);
+  ctx.strokeRect(60, 60, scale * 13, scale * 19);
+  ctx.strokeRect(30, 30, scale * 15, scale * 21);
+
+  titleOption();
+
+  ctx.font = "8pt Fira";
+  var list = ["<조작법>", "R : 재시작", "S : 일시정지", "Q : 계속", "방향키 : 브릭 이동" ,"Z,X : 방향전환", "Shift : 홀드"];
+  for(var i = 0; i < 7; i++){
+    ctx.fillText(list[i], 400, 610 + i * 15);
+  }
+  ctx.fillText("타이틀 그려줄 사람 구합니다", 90, 680);
+  ctx.fillText("Z : 결정, X : 뒤로가기", 90, 700);
+
+  arrow.draw();
+
+  //ctx.drawImage(img_title, 90, 70, 400, 130);
+
+  //ctx.font = "54pt Fira";
+  //ctx.fillText("TETRIS", 180, 150);
+
+  return;
+}
+
+function titleOption(){
+  //text is another function
+  ctx.fillStyle = "black";
+  ctx.font = "16pt Fira";
+
+  if(arrow.step == 0){
+    ctx.fillText("난이도", 250, 450);
+    ctx.fillText("게임 시작", 240, 550);
+    ctx.fillText("배경", 260, 650);
+  }else if(arrow.step == 1){
+    ctx.fillText("EASY", 260, 450);
+    ctx.fillText("NORMAL", 240, 550);
+    ctx.fillText("HARD", 260, 650);
+  }else{
+    ctx.fillText("화이트", 250, 450);
+    ctx.fillText("그레이", 250, 550);
+    ctx.fillText("블랙", 260, 650);
+  }
+}
+
+next_idx = 7;
+brickPackageCheck();
+            //start();
+title();
+
+/*
+img_title.addEventListener('load', () =>{ //처음 로딩용
+  ctx.drawImage(img_title, 90, 70, 400, 130);
+});
+*/
+
+</script>
+</body>
+</html>
